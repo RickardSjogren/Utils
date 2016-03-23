@@ -12,7 +12,7 @@ from scipy import stats
 
 
 def pairwise_test(first_data, second_data, test, nan_action='skip',
-                  *args, **kwargs):
+                  paired=False, *args, **kwargs):
     """ Test columns of first_data against columns of second_data.
 
     Additional arguments are passed to test-function used.
@@ -42,6 +42,8 @@ def pairwise_test(first_data, second_data, test, nan_action='skip',
     """
     if not nan_action in ('skip', 'omit_nan'):
         raise ValueError('unknown nan_action: {0}'.format(nan_action))
+    if nan_action == 'omit_nan' and len(first_data) != len(second_data) and paired:
+        raise ValueError('cannot omit NaNs with different number of rows')
     
     if type(first_data) == type(second_data) == type(pd.DataFrame()):
         if not (set(first_data.columns) == set(second_data.columns)):
@@ -61,11 +63,15 @@ def pairwise_test(first_data, second_data, test, nan_action='skip',
         raw_x = first_data[column].values
         raw_y = second_data[column].values
         
-        if nan_action == 'omit_nans':
-            # Omit positions which are NaN in any vector.
-            missing = np.logical_or(np.isnan(raw_x), np.isnan(raw_y))
-            x = raw_x[~missing]
-            y = raw_y[~missing]
+        if nan_action == 'omit_nan':
+            if paired:
+                # Omit positions which are NaN in any vector.
+                missing = np.logical_or(np.isnan(raw_x), np.isnan(raw_y))
+                x = raw_x[~missing]
+                y = raw_y[~missing]
+            else:
+                x = raw_x[~np.isnan(raw_x)]
+                y = raw_y[~np.isnan(raw_y)]
             
         elif np.logical_or(np.isnan(raw_x).any(), np.isnan(raw_y).any()):
             # If skipping NaN:s, set statistic and p-value to NaN if any
@@ -81,12 +87,37 @@ def pairwise_test(first_data, second_data, test, nan_action='skip',
         pvalues[i] = p
         
     return statistics, pvalues
-    
+
+
+def paired_students_t(x, y):
+    """ Perform a paired student's T test on `x` and `y`.
+
+    Parameters
+    ----------
+    x, y : array_like
+        One-dimensional vectors containings paired values.
+
+    Returns
+    -------
+    statistic : float
+        Paired student's t
+    p : float
+        P-value
+    """
+    if x.shape != y.shape:
+        raise ValueError('x and y do not match')
+
+    t_array, p = stats.ttest_rel(x, y)
+    # The t is returned in zero-dimensional array for some reason.
+    t = t_array.ravel()[0]
+
+    return t, p
 
 if __name__ == '__main__':
     import argparse
     
-    allowed_tests = ('student-t', 'mann-whitney-u', )    
+    allowed_tests = ('student-t', 'mann-whitney-u', 'welch-t',
+                     'paired-students-t')
     
     parser = argparse.ArgumentParser(description=(
         'This program performs column-wise statistical tests against the '
@@ -116,18 +147,18 @@ if __name__ == '__main__':
     group = parser.add_mutually_exclusive_group()
     omit_help = (
         'if set, calculate statistic using non-NaN-values '
-        'for those columns containing any missing values.'
+        'for those columns containing any missing values. '
+        'Only possible if datasets contain same number of rows.'
     )
-    group.add_argument('--omit_nans', dest='nan_action', action='store_const',
-                       const='omit_nan',
-                       help=omit_help)
+    group.add_argument('--omit_nans', action='store_true',
+                       default=False, help=omit_help)
                        
     skip_help = (
         'if set, skip calculating statistic in those cases '
         'where a column contains missing values.' 
     )
-    group.add_argument('--skip', dest='nan_action', action='store_const', 
-                       const='skip', help=skip_help)
+    group.add_argument('--skip', action='store_true', 
+                       default=False, help=skip_help)
     parser.set_defaults(nan_action='skip', test='student-t')
     
     args = parser.parse_args()
@@ -136,12 +167,28 @@ if __name__ == '__main__':
         test = stats.ttest_ind
     elif args.test == 'mann-whitney-u':
         test = stats.mannwhitneyu
+    elif args.test == 'welch-t':
+        test = lambda x, y: stats.ttest_ind(x, y, equal_var=False)
+    elif args.test == 'paired-students-t':
+        test = paired_students_t
         
     first_data = pd.DataFrame.from_csv(args.datasets[0])
     second_data = pd.DataFrame.from_csv(args.datasets[1])
     
+    if args.omit_nans and len(first_data) == len(second_data):
+        nan_action = 'omit_nan'
+    else:
+        if args.omit_nans:
+            msg = ('Warning: Different number of rows. Unable omit NaN:s. '
+                   'Skips columns containing any missing values instead')
+            print(msg)
+        nan_action = 'skip'
+    nan_action = 'omit_nan' if \
+        (args.omit_nans and len(first_data) == len(second_data)) else 'skip'
+
+    paired = args.test in ('paired-students-t', )
     statistics, pvalues = pairwise_test(first_data, second_data,
-                                        test, args.nan_action)
+                                        test, nan_action, paired=paired)
     results = pd.DataFrame(np.column_stack((statistics, pvalues)), 
                            index=first_data.columns, columns=['statistic', 'p'])
 
