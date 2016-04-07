@@ -17,7 +17,7 @@ import scipy.spatial.distance as sp_dist
 import scipy.cluster.hierarchy as sp_hierarchy
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import colors, ticker, patches
+from matplotlib import colors, ticker, patches, gridspec
 
 __author__ = 'Rickard Sjögren'
 __copyright__ = 'Copyright (C) 2016 Rickard Sjögren'
@@ -78,7 +78,8 @@ def correlation_matrix(*data, on_columns=True):
 
 def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
                        draw_numbers=False, mark_significant=False,
-                       mark_insignificant=False, no_frame=None, title=None):
+                       mark_insignificant=False, no_frame=None, title=None,
+                       ax=None):
     """ Draw a fancy heatmap and return figure and axis-instance.
     
     Parameters
@@ -91,7 +92,7 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
         Sequence of labels to use. If n != m, tuple of sequences with labels.
     alpha : float
         Significance value to use.
-    draw_number : bool
+    draw_numbers : bool
         If True, correlation numbers will be drawn in upper quadrant if n = m.
     mark_significant : bool
         If True, significant correlations will be marked with square.
@@ -106,17 +107,22 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
     matplotlib.pyplot.Figure
     matplotlib.pyplot.Axes
     """
-    f, ax = plt.subplots(dpi=600)
-    n, m = correlations.shape        
+    n, m = correlations.shape
+
     if n < m:
         correlations = correlations.T
         significance = significance.T
         n, m = m, n
         labels = labels[::-1]
-    
-    f.set_size_inches(.35 * m, .35 * n)    
+
+    if ax is None:
+        f, ax = plt.subplots(dpi=600)
+        f.set_size_inches(.35 * m, .35 * n)
+    else:
+        f = None
 
     is_square = n == m
+
     if not is_square:                
         y_labels, x_labels = labels
         no_frame = False if no_frame is None else no_frame
@@ -215,7 +221,70 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
     
     return f, ax
     
-    
+
+def make_fancy_correlationmap(correlations, significance, labels,
+                              *args, **kwargs):
+    """
+
+    Parameters
+    ----------
+    correlations
+    args
+    kwargs
+
+    Returns
+    -------
+
+    """
+    m, n = correlations.shape
+
+    if n < m:
+        correlations = correlations.T
+        significance = significance.T
+        n, m = m, n
+        labels = labels[::-1]
+
+    row_dist = sp_dist.squareform(sp_dist.pdist(correlations))
+    column_dist = sp_dist.squareform(sp_dist.pdist(correlations))
+
+    column_linkage = sp_hierarchy.linkage(column_dist, method='ward')
+    row_linkage = sp_hierarchy.linkage(row_dist, method='ward')
+
+    f = plt.figure()
+    gs = gridspec.GridSpec(6, 6)
+    axes = np.array([
+        [plt.subplot(gs[0, 0]), plt.subplot(gs[0, 1:])],
+        [plt.subplot(gs[1:, 0]), plt.subplot(gs[1:, 1:])]
+    ])
+
+    f.set_size_inches(.35 * m, .35 * n)
+
+    row_dendrogram = sp_hierarchy.dendrogram(row_linkage, orientation='left',
+                                             ax=axes[1, 0], color_threshold=0,
+                                            link_color_func=lambda x: 'black')
+    col_dendrogram = sp_hierarchy.dendrogram(column_linkage, orientation='top',
+                                             ax=axes[0, 1], color_threshold=0,
+                                             link_color_func=lambda x: 'black')
+
+    col_ind = col_dendrogram['leaves']
+    row_ind = row_dendrogram['leaves']
+
+    data = correlations.copy()[:, col_ind][row_ind, :]
+
+    if m == n:
+        labels = np.array(labels)[row_ind]
+
+
+    make_fancy_heatmap(correlations, significance, labels, *args, ax=axes[1, 1],
+                       **kwargs)
+
+    axes[0, 0].axis('off')
+    axes[0, 1].axis('off')
+    axes[1, 0].axis('off')
+
+    f.subplots_adjust(hspace=0, wspace=0)
+    return f, axes
+
     
 if __name__ == '__main__':
     import argparse
