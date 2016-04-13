@@ -79,7 +79,7 @@ def correlation_matrix(*data, on_columns=True):
 def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
                        draw_numbers=False, mark_significant=False,
                        mark_insignificant=False, no_frame=None, title=None,
-                       ax=None):
+                       ax=None, xlabel_loc='top', ylabel_loc='left'):
     """ Draw a fancy heatmap and return figure and axis-instance.
     
     Parameters
@@ -102,6 +102,10 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
         If True remove frame. Default is True when n = m, else False.
     title : str, None
         If provided, figure title will be set to `title`.
+    xlabel_loc : {'top', 'bottom'}
+        Where to draw X-axis labels, default 'top'
+    ylabel_loc : {'left', 'right'}
+        Where to draw Y-axis labels, default 'left'
     Returns
     -------
     matplotlib.pyplot.Figure
@@ -186,10 +190,15 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
     ax.set_xlim([0, m])
     ax.set_ylim([0, n])
     
-    if is_square:
+    if (is_square and xlabel_loc is None) or xlabel_loc =='top':
         ax.xaxis.tick_top()
-    if not (draw_numbers and is_square):
+    elif xlabel_loc =='bottom':
+        ax.xaxis.tick_bottom()
+    
+    if (not (draw_numbers and is_square)) or ylabel_loc == 'right':
         ax.yaxis.tick_right()
+    elif ylabel_loc == 'left':
+        ax.yaxis.tick_left()
     
     ax.set_xticklabels(x_labels, rotation=90 if is_square else 270)
     ax.set_yticklabels(y_labels)
@@ -274,14 +283,17 @@ def make_fancy_correlationmap(correlations, significance, labels,
 
     if m == n:
         labels = np.array(labels)[row_ind]
+        axes[1, 0].invert_yaxis()
     else:
         labels = [
             np.array(labels[1])[row_ind],
             np.array(labels[0])[col_ind],
         ]
-
+    x_loc = 'bottom' if (m == n and kwargs['draw_numbers']) else None
+    y_loc = 'right' if (m == n and kwargs['draw_numbers']) else None
+    
     make_fancy_heatmap(data, sigs, labels, *args, ax=axes[1, 1],
-                       **kwargs)
+                       xlabel_loc=x_loc, ylabel_loc=y_loc, **kwargs)
 
     axes[0, 0].axis('off')
     axes[0, 1].axis('off')
@@ -332,6 +344,8 @@ if __name__ == '__main__':
                               ' will be drawn in upper triangle.'))
     parser.add_argument('--figure_title', default=None, 
                         help='optional plot title')
+    parser.add_argument('--cluster', default=False, action='store_true',
+                        help='If this flag is set, ')
     
     args = parser.parse_args()
     
@@ -350,10 +364,26 @@ if __name__ == '__main__':
     
     if len(data) == 1:
         labels = data[0].columns if not args.use_rows else data[0].index
+        columns = labels
+        index = labels
     else:
         labels = [d.columns if not args.use_rows else d.index for d in data]
+        index, columns = labels
+        m, n = corr.shape
+        if n < m:
+            index, columns = columns, index
+        
+        
+    if args.cluster:
+        if not (args.draw_numbers or len(data) == 2):
+            msg = ('Clustermap requires two datasets or that numbers'
+                    ' are drawn. It looks horrible otherwise.')
+            sys.exit(msg)
+        plotter = make_fancy_correlationmap
+    else:
+        plotter = make_fancy_heatmap
     
-    f, ax = make_fancy_heatmap(
+    f, ax = plotter(
         corr, p, labels, args.alpha, args.draw_numbers,
         mark_significant=args.mark_significant,
         mark_insignificant=args.mark_insignificant,
@@ -361,10 +391,12 @@ if __name__ == '__main__':
     )
     
     if len(data) == 1 and not args.o:
-        filename = args.csvfile[0][:-4] + '_correlation.png'
+        filename = args.csvfile[0][:-4] + '_correlation'
     elif len(data) == 2 and not args.o:
-        filename = '_'.join(f[:-4] for f in args.csvfile)  + '_correlation.png'
+        filename = '_'.join(f[:-4] for f in args.csvfile)  + '_correlation'
     else:
         filename = args.o
         
-    f.savefig(filename, dpi=600, bbox_inches='tight')
+    f.savefig(filename + '.png', dpi=600, bbox_inches='tight')
+    pd.DataFrame(corr, index=index, columns=columns).to_csv(filename + '.csv')
+    pd.DataFrame(p, index=index, columns=columns).to_csv(filename + '_pvalues.csv')
