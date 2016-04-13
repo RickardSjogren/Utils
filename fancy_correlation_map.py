@@ -22,7 +22,7 @@ from matplotlib import colors, ticker, patches, gridspec
 __author__ = 'Rickard Sjögren'
 __copyright__ = 'Copyright (C) 2016 Rickard Sjögren'
 __licence__ = 'MIT'
-__version__ = '1.1'
+__version__ = '1.2'
 
 
 def correlation_matrix(*data, on_columns=True):
