@@ -245,7 +245,7 @@ def make_fancy_correlationmap(correlations, significance, labels,
         labels = labels[::-1]
 
     row_dist = sp_dist.squareform(sp_dist.pdist(correlations))
-    column_dist = sp_dist.squareform(sp_dist.pdist(correlations))
+    column_dist = sp_dist.squareform(sp_dist.pdist(correlations.T))
 
     column_linkage = sp_hierarchy.linkage(column_dist, method='ward')
     row_linkage = sp_hierarchy.linkage(row_dist, method='ward')
@@ -259,23 +259,28 @@ def make_fancy_correlationmap(correlations, significance, labels,
 
     f.set_size_inches(.35 * m, .35 * n)
 
-    row_dendrogram = sp_hierarchy.dendrogram(row_linkage, orientation='left',
+    row_dendrogram = sp_hierarchy.dendrogram(column_linkage, orientation='right',
                                              ax=axes[1, 0], color_threshold=0,
                                             link_color_func=lambda x: 'black')
-    col_dendrogram = sp_hierarchy.dendrogram(column_linkage, orientation='top',
+    col_dendrogram = sp_hierarchy.dendrogram(row_linkage, orientation='top',
                                              ax=axes[0, 1], color_threshold=0,
                                              link_color_func=lambda x: 'black')
 
-    col_ind = col_dendrogram['leaves']
-    row_ind = row_dendrogram['leaves']
-
+    col_ind = row_dendrogram['leaves']
+    row_ind = col_dendrogram['leaves']
+    
     data = correlations.copy()[:, col_ind][row_ind, :]
+    sigs = significance.copy()[:, col_ind][row_ind, :]
 
     if m == n:
         labels = np.array(labels)[row_ind]
+    else:
+        labels = [
+            np.array(labels[1])[row_ind],
+            np.array(labels[0])[col_ind],
+        ]
 
-
-    make_fancy_heatmap(correlations, significance, labels, *args, ax=axes[1, 1],
+    make_fancy_heatmap(data, sigs, labels, *args, ax=axes[1, 1],
                        **kwargs)
 
     axes[0, 0].axis('off')
