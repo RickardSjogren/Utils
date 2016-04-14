@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 """
-This module contains two functions to calculate and draw a correlation
+This module contains functions to calculate and draw a correlation
 map to show pairwise Pearson correlations and significances of correlation.
 
 See figure 2 in:
@@ -23,7 +23,7 @@ from matplotlib import colors, ticker, patches, gridspec
 __author__ = 'Rickard Sjögren'
 __copyright__ = 'Copyright (C) 2016 Rickard Sjögren'
 __licence__ = 'MIT'
-__version__ = '1.2'
+__version__ = '1.2.1'
 
 
 def correlation_matrix(*data, on_columns=True):
@@ -77,28 +77,28 @@ def correlation_matrix(*data, on_columns=True):
     
 
 
-def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
+def make_fancy_heatmap(data, significance, labels, alpha=.05,
                        draw_numbers=False, mark_significant=False,
                        mark_insignificant=False, no_frame=None, title=None,
-                       ax=None, xlabel_loc='top', ylabel_loc='left'):
+                       ax=None, xlabel_loc='top', ylabel_loc='left', cmap=None):
     """ Draw a fancy heatmap and return figure and axis-instance.
     
     Parameters
     ----------
-    correlations : array_like
-        n x m-matrix of correlation-values
+    data : array_like
+        n x m-matrix of data-values
     significance : array_like
-        n x m-matrix of correlation p-values
+        n x m-matrix of data p-values
     labels : Sequence, tuple[Sequence]
         Sequence of labels to use. If n != m, tuple of sequences with labels.
     alpha : float
         Significance value to use.
     draw_numbers : bool
-        If True, correlation numbers will be drawn in upper quadrant if n = m.
+        If True, data numbers will be drawn in upper quadrant if n = m.
     mark_significant : bool
-        If True, significant correlations will be marked with square.
+        If True, significant data will be marked with square.
     mark_insignifican : bool
-        If True, insignificant correlations will be marked with cross.
+        If True, insignificant data will be marked with cross.
     no_frame : bool, None
         If True remove frame. Default is True when n = m, else False.
     title : str, None
@@ -107,15 +107,17 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
         Where to draw X-axis labels, default 'top'
     ylabel_loc : {'left', 'right'}
         Where to draw Y-axis labels, default 'left'
+    cmap : matplotlib.colors.ColorMap
+        Color-map to use.
     Returns
     -------
     matplotlib.pyplot.Figure
     matplotlib.pyplot.Axes
     """
-    n, m = correlations.shape
+    n, m = data.shape
 
     if n < m:
-        correlations = correlations.T
+        data = data.T
         significance = significance.T
         n, m = m, n
         labels = labels[::-1]
@@ -134,24 +136,24 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
     else:
         y_labels = x_labels = labels
         no_frame = (True and not draw_numbers) if no_frame is None else no_frame
-        print('No frame is: {}'.format(no_frame))
     
     norm = colors.Normalize(-1, 1)
     
     # Custom colormap with nicer red and blue.
-    cmap = colors.LinearSegmentedColormap.from_list('custom', [
-        (0, (0.09, 0.36, 0.62)),
-        (.5, 'white'),
-        (1, (0.404, 0, 0.12))    
-    ])
+    if cmap is None:
+        cmap = colors.LinearSegmentedColormap.from_list('custom', [
+            (0, (0.09, 0.36, 0.62)),
+            (.5, 'white'),
+            (1, (0.404, 0, 0.12))    
+        ])
     color_map = plt.cm.ScalarMappable(norm, cmap)
-    corr_colors = color_map.to_rgba(correlations)
+    corr_colors = color_map.to_rgba(data)
     
     for row in range(n):
         inner_range = range(row, n) if is_square else range(m)        
 
         for col in inner_range:
-            corr = correlations[row, col]
+            corr = data[row, col]
             radius = np.sqrt(abs(corr)) / 2  # Area scales with correlation.
             color = corr_colors[row, col]
             
@@ -164,7 +166,7 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
                     label = '{:.2f}'.format(corr)
                     ax.annotate(label, (col + .5, row + .5),
                                 horizontalalignment='center',
-                                verticalalignment='center', size='x-small')
+                                verticalalignment='center', size='xx-small')
             else:
                 x = col
                 y = row
@@ -232,33 +234,52 @@ def make_fancy_heatmap(correlations, significance, labels, alpha=.05,
     return f, ax
     
 
-def make_fancy_correlationmap(correlations, significance, labels,
-                              *args, **kwargs):
-    """
+def make_fancy_clustermap(data, significance, labels,
+                          link_method='ward', distance='euclidean',
+                          *args, **kwargs):
+    """ Make a fancy clustermap.
+    
+    Prior to plotting of heatmap, the data is clustered both row-wise
+    and columnwise using hierarchical clustering. `distance` is used
+    as distance metric (see `<http://docs.scipy.org/doc/scipy-0.17.0/reference/generated/scipy.spatial.distance.pdist.html>`_)
+    for clustering and `link_method` is used as linkage method 
+    (see `<http://docs.scipy.org/doc/scipy-0.17.0/reference/generated/scipy.spatial.distance.pdist.html>`_).
+    
 
     Parameters
     ----------
-    correlations
-    args
-    kwargs
-
+    data : array_like
+        n x m-matrix of data-values
+    significance : array_like
+        n x m-matrix of data p-values
+    labels : Sequence, tuple[Sequence]
+        Sequence of labels to use. If n != m, tuple of sequences with labels.
+    link_method : str
+        Linking method for hierarchical clustering.
+    distance : str
+        Distance metric used for hierarchical clustering
+    *args
+        Arguments passed to :func:`make_fancy_heatmap`
+    **kwargs
+        Keyword arguments passed to :func:`make_fancy_heatmap`
     Returns
     -------
-
+    matplotlib.pyplot.Figure
+    matplotlib.pyplot.Axes
     """
-    m, n = correlations.shape
+    m, n = data.shape
 
     if n < m:
-        correlations = correlations.T
+        data = data.T
         significance = significance.T
         n, m = m, n
         labels = labels[::-1]
 
-    row_dist = sp_dist.squareform(sp_dist.pdist(correlations))
-    column_dist = sp_dist.squareform(sp_dist.pdist(correlations.T))
-
-    column_linkage = sp_hierarchy.linkage(column_dist, method='ward')
-    row_linkage = sp_hierarchy.linkage(row_dist, method='ward')
+    row_dist = sp_dist.squareform(sp_dist.pdist(data, metric=distance))
+    column_dist = sp_dist.squareform(sp_dist.pdist(data.T, metric=distance))
+    
+    column_linkage = sp_hierarchy.linkage(column_dist, method=link_method)
+    row_linkage = sp_hierarchy.linkage(row_dist, method=link_method)
 
     f = plt.figure()
     gs = gridspec.GridSpec(6, 6)
@@ -271,7 +292,7 @@ def make_fancy_correlationmap(correlations, significance, labels,
 
     # For some reason horizontal dendrograms seem to flip direction depending
     # on platform (or version). TODO: investigate this.
-    row_orient = 'left' in platform.system() != 'Windows' else 'right
+    row_orient = 'left' if platform.system() != 'Windows' else 'right'
     row_dendrogram = sp_hierarchy.dendrogram(column_linkage, orientation=row_orient,
                                              ax=axes[1, 0], color_threshold=0,
                                             link_color_func=lambda x: 'black')
@@ -282,7 +303,7 @@ def make_fancy_correlationmap(correlations, significance, labels,
     col_ind = row_dendrogram['leaves']
     row_ind = col_dendrogram['leaves']
     
-    data = correlations.copy()[:, col_ind][row_ind, :]
+    data = data.copy()[:, col_ind][row_ind, :]
     sigs = significance.copy()[:, col_ind][row_ind, :]
 
     if m == n:
@@ -290,8 +311,8 @@ def make_fancy_correlationmap(correlations, significance, labels,
         axes[1, 0].invert_yaxis()
     else:
         labels = [
-            np.array(labels[1])[row_ind],
-            np.array(labels[0])[col_ind],
+            np.array(labels[0])[row_ind],
+            np.array(labels[1])[col_ind],
         ]
     x_loc = 'bottom' if (m == n and kwargs['draw_numbers']) else None
     y_loc = 'right' if (m == n and kwargs['draw_numbers']) else None
@@ -374,21 +395,18 @@ if __name__ == '__main__':
         labels = [d.columns if not args.use_rows else d.index for d in data]
         index, columns = labels
         m, n = corr.shape
-        if n < m:
-            index, columns = columns, index
-        
         
     if args.cluster:
         if not (args.draw_numbers or len(data) == 2):
             msg = ('Clustermap requires two datasets or that numbers'
                     ' are drawn. It looks horrible otherwise.')
             sys.exit(msg)
-        plotter = make_fancy_correlationmap
+        plotter = make_fancy_clustermap
     else:
         plotter = make_fancy_heatmap
     
     f, ax = plotter(
-        corr, p, labels, args.alpha, draw_numbers=args.draw_numbers,
+        corr, p, labels, alpha=args.alpha, draw_numbers=args.draw_numbers,
         mark_significant=args.mark_significant,
         mark_insignificant=args.mark_insignificant,
         title=args.figure_title
