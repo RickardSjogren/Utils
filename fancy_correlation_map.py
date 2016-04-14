@@ -17,6 +17,7 @@ import scipy.spatial.distance as sp_dist
 import scipy.cluster.hierarchy as sp_hierarchy
 import numpy as np
 import matplotlib.pyplot as plt
+import platform
 from matplotlib import colors, ticker, patches, gridspec
 
 __author__ = 'Rickard Sjögren'
@@ -268,7 +269,10 @@ def make_fancy_correlationmap(correlations, significance, labels,
 
     f.set_size_inches(.35 * m, .35 * n)
 
-    row_dendrogram = sp_hierarchy.dendrogram(column_linkage, orientation='right',
+    # For some reason horizontal dendrograms seem to flip direction depending
+    # on platform (or version). TODO: investigate this.
+    row_orient = 'left' in platform.system() != 'Windows' else 'right
+    row_dendrogram = sp_hierarchy.dendrogram(column_linkage, orientation=row_orient,
                                              ax=axes[1, 0], color_threshold=0,
                                             link_color_func=lambda x: 'black')
     col_dendrogram = sp_hierarchy.dendrogram(row_linkage, orientation='top',
@@ -384,7 +388,7 @@ if __name__ == '__main__':
         plotter = make_fancy_heatmap
     
     f, ax = plotter(
-        corr, p, labels, args.alpha, args.draw_numbers,
+        corr, p, labels, args.alpha, draw_numbers=args.draw_numbers,
         mark_significant=args.mark_significant,
         mark_insignificant=args.mark_insignificant,
         title=args.figure_title
