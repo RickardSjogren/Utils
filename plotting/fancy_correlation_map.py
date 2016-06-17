@@ -183,7 +183,11 @@ def make_fancy_heatmap(data, significance, labels, alpha=.05,
             else:
                 x = col
                 y = row
-            
+
+                circle = plt.Circle((row + .5, col + .5), .95 * radius,
+                                    color=color)
+                ax.add_artist(circle)
+
             circle = plt.Circle((x + .5, y + .5), .95 * radius, color=color)
             ax.add_artist(circle)
             
@@ -213,7 +217,7 @@ def make_fancy_heatmap(data, significance, labels, alpha=.05,
     elif xlabel_loc =='bottom':
         ax.xaxis.tick_bottom()
 
-    if  ylabel_loc == 'right':
+    if ylabel_loc == 'right':
         ax.yaxis.tick_right()
     elif ylabel_loc == 'left':
         ax.yaxis.tick_left()
@@ -380,7 +384,13 @@ def fancy_heatmap_with_blocks(data, significance, labels,
     kwargs['ylabel_loc'] = 'left'
     m = max(data.shape)
     n = min(data.shape)
-    blocks = labels[np.argmax(data.shape)]
+    if data.shape[0] != data.shape[1]:
+        blocks = labels[np.argmax(data.shape)]
+        is_square = False
+    else:
+        blocks = labels
+        is_square = True
+
     line_kwargs = {
         'c': 'black', 'linewidth': 2
     }
@@ -400,7 +410,7 @@ def fancy_heatmap_with_blocks(data, significance, labels,
         except IndexError:
             next = None
 
-        if next == right_label  and lines[0] > 1:
+        if next == right_label:
             current_run += 1
         else:
             x = min(data.shape)
@@ -410,7 +420,7 @@ def fancy_heatmap_with_blocks(data, significance, labels,
             if current_run > 0:
                 w = textpath.TextPath((0, 0), right_label).get_extents(
                     transform=ax.transData.inverted()).width
-                ax.annotate(right_label, (x, y), xytext=(x, .2 + y + w),
+                ax.annotate(right_label, (x, y), xytext=(x, .2 + y - w),
                             rotation=270, font_properties=font)
             else:
                 # Label is horizontal.
@@ -419,24 +429,33 @@ def fancy_heatmap_with_blocks(data, significance, labels,
 
         # Draw division lines.
         if i == cum_lines:
-            ax.axhline(i, zorder=3, **line_kwargs)
+            if not is_square:
+                ax.axhline(i, zorder=3, **line_kwargs)
+            else:
+                ax.plot([i, i, m], [m, i, i], zorder=3, **line_kwargs)
+
             try:
                 cum_lines += lines.pop(0)
             except IndexError:
                 cum_lines = None
 
     # Change font and colors of tick-labels.
-    for label, class_id in zip(ax.yaxis.get_ticklabels(), class_ids):
-        label.set_font_properties(font)
-        try:
-            label.set_color(label_colors[class_id])
-        except KeyError:
-            pass
-    for label in ax.xaxis.get_ticklabels():
-        label.set_font_properties(font)
+    for ylabel, xlabel, class_id in zip(ax.yaxis.get_ticklabels(),
+                                        ax.xaxis.get_ticklabels(), class_ids):
+        for label in [xlabel, ylabel] if is_square else [ylabel]:
+            label.set_font_properties(font)
+            try:
+                label.set_color(label_colors[class_id])
+            except KeyError:
+                pass
+
+    for ylabel in ax.xaxis.get_ticklabels():
+        ylabel.set_font_properties(font)
 
     ax.set_xlim(0, min(data.shape))
     ax.set_ylim(0, max(data.shape))
+
+    ax.plot([0, 0, m, m, 0], [0, m, m, 0, 0], c='black')
 
     ax.invert_yaxis()
 
