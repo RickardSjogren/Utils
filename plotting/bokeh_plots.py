@@ -206,6 +206,70 @@ def plot_score_loading(scores, loadings, R2, n_pcs=2,
     return fig
 
 
+def score_grid_plot(scores, R2, n_pcs=2, obs_labels=None, obs_class_labels=None,
+                    height=500, width=500):
+    """ Plot `n_pcs` scores against each other in a all against all-fashion.
+
+    Arrange plot in grid.
+
+    Parameters
+    ----------
+    scores : array_like
+        Array with all model scores as columns.
+    R2 : array_like
+        Array with R2-values for each model component.
+    n_pcs : int
+        Number of components to use.
+    obs_labels : list[str], optional
+        Observation labels.
+    obs_class_labels : list[str], optional
+        Observation classification.
+    height : int
+        Height of each subplot, default 500.
+    width : int
+        Width of each subplot, default 500.
+
+    Returns
+    -------
+    bokeh.plotting.figure
+    """
+    cols = ['C{}'.format(i + 1) for i in range(scores.shape[1])]
+    obs_labels = obs_labels or list(map(str, range(len(scores))))
+
+    score_df = pd.DataFrame(scores, index=obs_labels, columns=cols)
+    score_df['labels'] = obs_labels
+
+    if obs_class_labels is not None:
+        score_df['class'] = obs_class_labels
+
+    score_color_map = make_color_mapping(obs_class_labels, BREWER12plus12)
+    score_source = ColumnDataSource(data=score_df)
+
+    TOOLS = "box_select,lasso_select,pan,help,box_zoom,wheel_zoom,reset"
+
+    plots = [[None for i in range(n_pcs - 1)] for j in range(n_pcs - 1)]
+
+    for i, j in itertools.combinations_with_replacement(range(n_pcs), 2):
+        if i == j:
+            continue
+        PC1 = 'C{}'.format(i + 1)
+        PC2 = 'C{}'.format(j + 1)
+
+        # Score plot.
+        score_title = 't[{}] vs t[{}]'.format(i + 1, j + 1)
+        t1_lab = 't[{}] ({:.2f} %)'.format(i + 1, R2[i])
+        t2_lab = 't[{}] ({:.2f} %)'.format(j + 1, R2[j])
+
+        score_plot = scatter_plot(PC1, PC2, score_source, obs_class_labels,
+                                  score_color_map, tools=TOOLS, height=height,
+                                  title=score_title, x_axis_label=t1_lab,
+                                  y_axis_label=t2_lab, width=width)
+        plots[j - 1][i] = score_plot
+
+    fig = gridplot(plots)
+    return fig
+
+
 def scatter_plot(x, y, source, class_labels=None, cmap=None, **kwargs):
     """ Make class colored scatter-plot.
 

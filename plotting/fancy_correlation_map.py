@@ -184,9 +184,10 @@ def make_fancy_heatmap(data, significance, labels, alpha=.05,
                 x = col
                 y = row
 
-                circle = plt.Circle((row + .5, col + .5), .95 * radius,
-                                    color=color)
-                ax.add_artist(circle)
+                if is_square:
+                    circle = plt.Circle((row + .5, col + .5), .95 * radius,
+                                        color=color)
+                    ax.add_artist(circle)
 
             circle = plt.Circle((x + .5, y + .5), .95 * radius, color=color)
             ax.add_artist(circle)
@@ -432,7 +433,8 @@ def fancy_heatmap_with_blocks(data, significance, labels,
             if not is_square:
                 ax.axhline(i, zorder=3, **line_kwargs)
             else:
-                ax.plot([i, i, m], [m, i, i], zorder=3, **line_kwargs)
+                ax.plot([i, i, m], [m, i, i], zorder=3, color='black',
+                        linewidth=2)
 
             try:
                 cum_lines += lines.pop(0)
@@ -440,22 +442,32 @@ def fancy_heatmap_with_blocks(data, significance, labels,
                 cum_lines = None
 
     # Change font and colors of tick-labels.
-    for ylabel, xlabel, class_id in zip(ax.yaxis.get_ticklabels(),
-                                        ax.xaxis.get_ticklabels(), class_ids):
-        for label in [xlabel, ylabel] if is_square else [ylabel]:
+    if is_square:
+        labels = zip(ax.yaxis.get_ticklabels(), ax.xaxis.get_ticklabels())
+    else:
+        labels = ax.yaxis.get_ticklabels()
+
+    for tick_label, class_id in zip(labels, class_ids):
+        try:
+            x_label, y_label = tick_label
+        except TypeError:
+            y_label = tick_label
+            x_label = None
+
+        for label in [x_label, y_label] if x_label is not None else [y_label]:
             label.set_font_properties(font)
             try:
                 label.set_color(label_colors[class_id])
             except KeyError:
                 pass
 
-    for ylabel in ax.xaxis.get_ticklabels():
-        ylabel.set_font_properties(font)
+    for label in ax.xaxis.get_ticklabels():
+        label.set_font_properties(font)
 
     ax.set_xlim(0, min(data.shape))
     ax.set_ylim(0, max(data.shape))
 
-    ax.plot([0, 0, m, m, 0], [0, m, m, 0, 0], c='black')
+    ax.plot([0, 0, m, m, 0], [0, m, m, 0, 0], color='black')
 
     ax.invert_yaxis()
 
