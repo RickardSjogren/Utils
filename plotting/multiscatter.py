@@ -180,7 +180,8 @@ def plot_whiskers(ax, x, y):
     x_mean = x.mean()
     y_mean = y.mean()
     for x, y in zip(x, y):
-        ax.plot([x_mean, x], [y_mean, y], color=np.array([0, 0, 0, .5]))
+        ax.plot([x_mean, x], [y_mean, y], color=np.array([0, 0, 0, .5]),
+                zorder=-.5)
 
 
 def plot_bezier(ax, x, y, color=None):
