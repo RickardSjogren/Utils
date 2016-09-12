@@ -39,7 +39,7 @@ __licence__ = 'MIT'
 __version__ = '1.3.0'
 
 
-def correlation_matrix(*data, on_columns=True):
+def correlation_matrix(*data, on_columns=True, correlation_fn=stats.pearsonr):
     """ Calculate correlation matrix.
     
     If one data matrix is provided in `data` the auto-correlation
@@ -53,6 +53,9 @@ def correlation_matrix(*data, on_columns=True):
         Tuple of one or two data matrices.
     on_columns : bool
         If True, calculate correlations between columns, else rows.
+    correlation_fn : Callable
+        Function to calculate correlation. It takes two 1d numpy arrays
+        as arguments and returns a tuple of correlation and p-value.
     
     Returns
     -------
@@ -82,7 +85,7 @@ def correlation_matrix(*data, on_columns=True):
     for i, row in enumerate(first_data):
         for j, other_row in enumerate(second_data):
             missing = np.logical_or(np.isnan(row), np.isnan(other_row))            
-            corr, p = stats.pearsonr(row[~missing], other_row[~missing])
+            corr, p = correlation_fn(row[~missing], other_row[~missing])
             correlations[i, j] = corr
             significance[i, j] = p
             
@@ -536,7 +539,11 @@ if __name__ == '__main__':
                               'the last line. Example: 3,3,2,1'))
     parser.add_argument('--save_values', default=False, action='store_true',
                         help=('If set, save csv with correlations and p.'))
-    
+    parser.add_argument('--correlation_metric', default='pearson',
+                        choices=('pearson', 'spearman',
+                                 'kendall', 'pointbiserial'),
+                        help='Correlation coefficient to use.')
+
     args = parser.parse_args()
     
     if not all(f.endswith('csv') for f in args.csvfile):
@@ -549,8 +556,15 @@ if __name__ == '__main__':
         
     data = [pd.DataFrame.from_csv(f) for f in args.csvfile]
     arrays = [df.values for df in data]
-    
-    corr, p = correlation_matrix(*arrays, on_columns=not args.use_rows)
+
+    correlation_fn = {
+        'pearson': stats.pearsonr,
+        'spearman': stats.spearmanr,
+        'kendall': stats.kendalltau,
+        'pointbiserial': stats.pointbiserialr
+    }[args.correlation_metric]
+    corr, p = correlation_matrix(*arrays, on_columns=not args.use_rows,
+                                 correlation_fn=correlation_fn)
     
     if len(data) == 1:
         labels = data[0].columns if not args.use_rows else data[0].index
