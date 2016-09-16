@@ -113,12 +113,16 @@ def make_clustered_heatmap(data, col_link, row_link, row_labels=None,
         row_col_ax = fig.add_subplot(gs[3 + int(has_col_colors):, 3])
         plot_color_sequence(row_colors, 'vertical', row_col_ax,
                             **(row_color_kwargs or dict()))
+    else:
+        row_col_ax = None
 
     if has_col_colors:
         col_colors = np.array(col_colors)[col_ind]
         col_col_ax = fig.add_subplot(gs[3, 3 + int(has_row_colors):])
         plot_color_sequence(col_colors, 'horizontal', col_col_ax,
                             **(col_color_kwargs or dict()))
+    else:
+        col_col_ax = None
 
     label_clustermap_axes(row_labels, col_labels, row_ind, col_ind, main_ax)
 
@@ -132,7 +136,8 @@ def make_clustered_heatmap(data, col_link, row_link, row_labels=None,
     if colorbar_label is not None:
         cb_ax.set_title(colorbar_label)
 
-    return fig, np.array([main_ax, left_ax, top_ax, cb_ax])
+    return fig, np.array([main_ax, left_ax, top_ax, cb_ax,
+                          row_col_ax, col_col_ax])
 
 
 def plot_network_vectors(data, linkage, pcolormesh_kwargs=None,
