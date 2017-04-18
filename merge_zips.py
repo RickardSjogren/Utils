@@ -53,9 +53,9 @@ def make_parser():
     parser.add_argument('-o', '--output',
                         help='Output path (default {})'.format(default_output),
                         default=default_output)
-    parser.add_argument('--no_compression', action='store_false',
+    parser.add_argument('--no_compression', action='store_true',
                         help='If set, do not compress output.')
-    parser.add_argument('--zip64', action='store_true', default=False,
+    parser.add_argument('--zip64', action='store_true',
                         help='If set, allow Zip64.')
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help='Increase output verbosity.')
