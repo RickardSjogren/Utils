@@ -4,12 +4,13 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.path import Path
 from matplotlib import colors
+from matplotlib.collections import PolyCollection
 from scipy.stats.mstats import zscore
 
 
-def multiblock_scatter_plot(X, Y, mode='whiskers', color='blue', ax=None,
+def multiblock_scatter_plot(X, Y, mode='whiskers', color=None, ax=None,
                             x_label=None, y_label=None, title=None,
-                            label_fn=None):
+                            label_fn=None, **kwargs):
     """ Draw scatter-plot of multi-block points.
 
     Parameters
@@ -51,12 +52,22 @@ def multiblock_scatter_plot(X, Y, mode='whiskers', color='blue', ax=None,
         data_color = [color for _ in X]
     elif callable(color):
         data_color = color(X, Y)
+    elif isinstance(color, list):
+        assert len(color) == len(X)
+        data_color = color
+    elif color is None:
+        data_color = None
     else:
         raise ValueError('color must be string or callable.')
 
     ax.axhline(0, color='k', zorder=-1)
     ax.axvline(0, color='k', zorder=-1)
 
+    X = X / np.linalg.norm(X, axis=0)
+    Y = Y / np.linalg.norm(Y, axis=0)
+
+    x_means = X.mean(axis=1)
+    y_means = Y.mean(axis=1)
     # Draw points of each block according to mode.
     for i, (x_row, y_row) in enumerate(zip(X, Y)):
         if mode == 'whiskers':
@@ -64,15 +75,18 @@ def multiblock_scatter_plot(X, Y, mode='whiskers', color='blue', ax=None,
         elif mode == 'bezier':
             plot_bezier(ax, x_row, y_row, color=data_color[i])
 
-    x_means = X.mean(axis=1)
-    y_means = Y.mean(axis=1)
-
     if mode == 'whiskers':
         # Draw mean-value points.
         ax.scatter(x_means, y_means, c=data_color, s=100)
+    if mode == 'wedge':
+        ax.scatter(X.ravel(), Y.ravel(), c='none', s=0)
+        wedge_mode_plot(ax, data_color, X, Y,
+                        data_labels=kwargs.pop('data_labels', None),
+                        **kwargs)
     else:
         # This sets the xlim and ylim to proper values.
         ax.scatter(x_means, y_means, c='none', s=0)
+
 
     if x_label is not None:
         ax.set_xlabel(x_label)
@@ -164,6 +178,102 @@ def variance_sum_of_squares(X, Y):
     var = ((X - np.atleast_2d(x_means).T) ** 2 + (
     Y - np.atleast_2d(y_means).T) ** 2).sum(1)
     return var
+
+
+def wedge_mode_plot(ax, data_color, X, Y,
+                    scaling_factor=3.5, block_colors=None, data_labels=None,
+                    **scatter_kwargs):
+    """ Plot data as wedges from mean point to block points.
+
+    :param matplotlib.pyplot.Axes ax: Axis-object.
+    :param lits data_color: Sequence of colors.
+    :param array_like X: Data block.
+    :param arrray_like Y: Data block.
+    :return: Center-point collection, block point collection and
+             data-index to block point index.
+    :rtype: tuple[matplotlib.collections.Collection,
+                  matplotlib.collections.Collection,
+                  dict[int, list[int]]]
+    """
+    skip = np.isnan(X).all(0) | np.isnan(Y).all(0)
+    #
+    # x_missing = np.isnan(X).all(0)
+    # y_missing = np.isnan(Y).all(0)
+    # X = np.nan_to_num(X)
+    # Y = np.nan_to_num(Y)
+
+
+    # if not np.array_equal(np.isnan(X), np.isnan(Y)):
+    #     raise ValueError('X and Y does not match.')
+    xmin, xmax = ax.get_xlim()
+    ymin, ymax = ax.get_ylim()
+    span = abs(xmax - xmin), abs(ymax - ymin)
+    euclid_span = np.sqrt(span[0] ** 2 + span[1] ** 2)
+    offset = euclid_span * (scaling_factor / 1e3)
+
+    # Use block colors if available.
+    if block_colors is not None:
+        colors = [block_colors for _ in X]
+    else:
+        colors = [[col] * X.shape[1] for col in data_color]
+
+    vertices = list()
+    vertex_color = list()
+
+    x_means = np.zeros((len(X), ))
+    y_means = np.zeros((len(Y), ))
+
+    for i, (xrow, yrow) in enumerate(zip(X, Y)):
+        xmean = xrow[~skip].mean()
+        ymean = yrow[~skip].mean()
+
+        x_means[i] = xmean
+        y_means[i] = ymean
+
+        for j, (x, y) in enumerate(zip(xrow, yrow)):
+            if np.isnan(x) or np.isnan(y):
+                continue
+
+            # A little linear algebra to get offset points which are close
+            # to mean point, lying on a line orthogonal to vector between
+            # block point and mean point in a distance so that the vectors
+            # from the mean point to offset points are orthogonal.
+            d = np.array((x - xmean, y - ymean))
+            mean = np.array((xmean, ymean))
+            dnorm = offset * (d / np.linalg.norm(d))
+            dortho = np.array((dnorm[1], -dnorm[0]))
+            dorthonorm = (offset * np.sqrt(.5)) * dortho / np.linalg.norm(dortho)
+            offpoint1 = mean + dnorm + dorthonorm
+            offpoint2 = mean + dnorm - dorthonorm
+
+            vertices.append([
+                (x, y),
+                (offpoint1[0], offpoint1[1]),
+                (xmean, ymean),
+                (offpoint2[0], offpoint2[1]),
+            ])
+            vertex_color.append(colors[i][j])
+
+    edge_color = ['none'] * len(vertex_color)
+    poly_collection = PolyCollection(vertices, facecolors=vertex_color,
+                                     edgecolors=edge_color, zorder=1)
+
+    ax.add_collection(poly_collection)
+    if data_color is not None:
+        unique_colors = [c for i, c in enumerate(data_color)
+                         if i == 0 or data_color[i- 1] != c]
+        if len(unique_colors) < len(data_color) // 2:
+            if data_labels is None:
+                data_labels = ['Data_{}'.format(i)
+                               for i, _ in enumerate(unique_colors, 1)]
+
+            for color, label in zip(unique_colors, data_labels):
+                i = np.where(np.array(data_color) == color)[0]
+                ax.scatter(x_means[i], y_means[i], c=color, label=label,
+                           zorder=10, **scatter_kwargs)
+        else:
+            ax.scatter(x_means, y_means, c=data_color,
+                       zorder=10, **scatter_kwargs)
 
 
 def plot_whiskers(ax, x, y):
